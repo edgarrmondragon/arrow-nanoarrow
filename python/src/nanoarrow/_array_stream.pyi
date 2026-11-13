@@ -54,6 +54,46 @@ class CArrayStream:
             If True, enforce type equality between the provided schema and the schema
             of each array.
         """
+    @staticmethod
+    def from_iterable(*args, **kwargs):
+        """Create an ArrowArrayStream that pulls arrays lazily from an iterable
+
+        Each call to the stream's ``get_next()`` takes the next item from ``obj``
+        and converts it with :func:`c_array`, so batches can be produced on demand
+        instead of being resolved up front as with :meth:`from_c_arrays`. Neither
+        creating the stream nor requesting its schema consumes the iterable.
+
+        An exception raised while producing or converting an item (including
+        ``KeyboardInterrupt``) can't propagate through the C stream interface.
+        It ends the stream with an error whose message starts with the exception's
+        type name, and every later ``get_next()`` call returns the same error.
+        The stream drops its reference to the iterator once it is exhausted or
+        raises, and the iterator must not use the stream while producing an item.
+
+        Parameters
+        ----------
+        obj : iterable
+            An iterable of arrays or array-likes. Items that implement the Arrow
+            PyCapsule interface are used as-is; any other item is converted with
+            ``c_array(item, schema)``.
+        schema : CSchema
+            The schema that will be returned. Must be type equal with the schema
+            of each array (this is checked if validate is ``True``)
+        validate : bool, optional
+            If True, enforce type equality between the provided schema and the schema
+            of each array, and validate each array's buffers.
+
+        Examples
+        --------
+        >>> import nanoarrow as na
+        >>> from nanoarrow.c_array_stream import CArrayStream
+        >>> def batches():
+        ...     yield [1, 2, 3]
+        ...     yield [4, 5]
+        >>> stream = CArrayStream.from_iterable(batches(), na.c_schema(na.int32()))
+        >>> [array.length for array in stream]
+        [3, 2]
+        """
     def get_next(self, *args, **kwargs):
         """Get the next Array from this stream
 

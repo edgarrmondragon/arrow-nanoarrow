@@ -18,8 +18,11 @@
 # cython: language_level = 3
 
 
+from libc.errno cimport EINVAL, EIO
 from libc.stdint cimport uintptr_t, int64_t
+from libc.stdio cimport snprintf
 from cpython.pycapsule cimport PyCapsule_GetPointer
+from cpython.ref cimport Py_INCREF, Py_DECREF
 
 from nanoarrow_c cimport (
     ArrowArray,
@@ -31,8 +34,12 @@ from nanoarrow_c cimport (
     ArrowBasicArrayStreamSetArray,
     ArrowBasicArrayStreamValidate,
     ArrowBufferAppendInt64,
+    ArrowError,
     ArrowResolveChunk64,
+    ArrowSchema,
+    ArrowSchemaDeepCopy,
     ArrowType,
+    NANOARROW_OK,
 )
 
 from nanoarrow cimport _types
@@ -48,6 +55,124 @@ from nanoarrow._utils cimport (
 from typing import Iterable, List, Tuple
 
 from nanoarrow import _repr_utils
+
+
+cdef class _IterableArrayStreamPrivate:
+    """State for an ArrowArrayStream that pulls arrays lazily from a Python iterator
+
+    An instance is the ``private_data`` of the stream, which holds one reference to it
+    until the stream is released. After the iterator is exhausted or raises, the stream
+    drops it and keeps returning the same result.
+    """
+    cdef object _iterator
+    cdef CSchema _schema
+    cdef bint _validate
+    cdef bint _finished
+    cdef bint _evaluating
+    cdef int _error_code
+    cdef ArrowError _error
+
+    def __cinit__(self, object iterator, CSchema schema, bint validate):
+        self._iterator = iterator
+        self._schema = schema
+        self._validate = validate
+        self._finished = False
+        self._evaluating = False
+        self._error_code = NANOARROW_OK
+        self._error.message[0] = 0
+
+    cdef int _set_error(self, int code, object message) noexcept:
+        cdef bytes message_bytes = str(message).encode("utf-8", "replace")
+        snprintf(
+            self._error.message,
+            sizeof(self._error.message),
+            "%s",
+            <const char*>message_bytes,
+        )
+        self._error_code = code
+        self._iterator = None
+        return code
+
+    cdef CArray _next_c_array(self):
+        from nanoarrow.c_array import c_array
+
+        item = next(self._iterator)
+
+        # Arrays (and array-likes) are used as-is because CArray doesn't support
+        # requested_schema; anything else (e.g., a list of values) is built with
+        # the schema
+        if hasattr(item, "__arrow_c_array__"):
+            array = c_array(item)
+        else:
+            array = c_array(item, self._schema)
+
+        if self._validate:
+            assert_type_equal(array.schema, self._schema, False)
+            array.view()
+
+        return array
+
+    cdef int get_next(self, ArrowArray* out) noexcept:
+        cdef CArray array
+
+        if self._finished:
+            return NANOARROW_OK
+        if self._error_code != NANOARROW_OK:
+            return self._error_code
+        if self._evaluating:
+            return self._set_error(
+                EINVAL,
+                "Re-entrant call to get_next() on an array stream from an iterable",
+            )
+
+        self._evaluating = True
+        try:
+            array = self._next_c_array()
+            c_array_shallow_copy(array._base, array._ptr, out)
+        except StopIteration:
+            self._finished = True
+            self._iterator = None
+        except BaseException as e:
+            # Errors (and interrupts) can't cross the C callback: report them as a
+            # terminal stream error that keeps the original type name
+            return self._set_error(EIO, f"{type(e).__name__}: {e}")
+        finally:
+            self._evaluating = False
+
+        return NANOARROW_OK
+
+
+cdef int _iterable_array_stream_get_schema(
+    ArrowArrayStream* stream, ArrowSchema* out
+) noexcept nogil:
+    with gil:
+        return ArrowSchemaDeepCopy(
+            (<_IterableArrayStreamPrivate>stream.private_data)._schema._ptr, out
+        )
+
+
+cdef int _iterable_array_stream_get_next(
+    ArrowArrayStream* stream, ArrowArray* out
+) noexcept nogil:
+    out.release = NULL
+    with gil:
+        return (<_IterableArrayStreamPrivate>stream.private_data).get_next(out)
+
+
+cdef const char* _iterable_array_stream_get_last_error(
+    ArrowArrayStream* stream
+) noexcept nogil:
+    with gil:
+        # The message buffer lives as long as the stream holds its private data
+        return (<_IterableArrayStreamPrivate>stream.private_data)._error.message
+
+
+cdef void _iterable_array_stream_release(ArrowArrayStream* stream) noexcept nogil:
+    with gil:
+        Py_DECREF(<object>stream.private_data)
+
+    stream.private_data = NULL
+    stream.release = NULL
 
 
 cdef class CArrayStream:
@@ -134,6 +259,63 @@ cdef class CArrayStream:
         if validate:
             code = ArrowBasicArrayStreamValidate(c_array_stream_out, &error.c_error)
             error.raise_message_not_ok("ArrowBasicArrayStreamValidate()", code)
+
+        return CArrayStream(base, <uintptr_t>c_array_stream_out)
+
+    @staticmethod
+    def from_iterable(obj, CSchema schema, validate=True) -> CArrayStream:
+        """Create an ArrowArrayStream that pulls arrays lazily from an iterable
+
+        Each call to the stream's ``get_next()`` takes the next item from ``obj``
+        and converts it with :func:`c_array`, so batches can be produced on demand
+        instead of being resolved up front as with :meth:`from_c_arrays`. Neither
+        creating the stream nor requesting its schema consumes the iterable.
+
+        An exception raised while producing or converting an item (including
+        ``KeyboardInterrupt``) can't propagate through the C stream interface.
+        It ends the stream with an error whose message starts with the exception's
+        type name, and every later ``get_next()`` call returns the same error.
+        The stream drops its reference to the iterator once it is exhausted or
+        raises, and the iterator must not use the stream while producing an item.
+
+        Parameters
+        ----------
+        obj : iterable
+            An iterable of arrays or array-likes. Items that implement the Arrow
+            PyCapsule interface are used as-is; any other item is converted with
+            ``c_array(item, schema)``.
+        schema : CSchema
+            The schema that will be returned. Must be type equal with the schema
+            of each array (this is checked if validate is ``True``)
+        validate : bool, optional
+            If True, enforce type equality between the provided schema and the schema
+            of each array, and validate each array's buffers.
+
+        Examples
+        --------
+        >>> import nanoarrow as na
+        >>> from nanoarrow.c_array_stream import CArrayStream
+        >>> def batches():
+        ...     yield [1, 2, 3]
+        ...     yield [4, 5]
+        >>> stream = CArrayStream.from_iterable(batches(), na.c_schema(na.int32()))
+        >>> [array.length for array in stream]
+        [3, 2]
+        """
+        iterator = iter(obj)
+        private_data = _IterableArrayStreamPrivate(
+            iterator, schema.__deepcopy__(), validate
+        )
+
+        cdef ArrowArrayStream* c_array_stream_out
+        base = alloc_c_array_stream(&c_array_stream_out)
+
+        Py_INCREF(private_data)
+        c_array_stream_out.private_data = <void*>private_data
+        c_array_stream_out.get_schema = &_iterable_array_stream_get_schema
+        c_array_stream_out.get_next = &_iterable_array_stream_get_next
+        c_array_stream_out.get_last_error = &_iterable_array_stream_get_last_error
+        c_array_stream_out.release = &_iterable_array_stream_release
 
         return CArrayStream(base, <uintptr_t>c_array_stream_out)
 
