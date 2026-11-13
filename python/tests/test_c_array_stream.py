@@ -16,6 +16,7 @@
 # under the License.
 
 import pytest
+from nanoarrow._utils import NanoarrowException
 from nanoarrow.c_array_stream import CArrayStream
 
 import nanoarrow as na
@@ -151,3 +152,132 @@ def test_array_stream_from_arrays_validate():
     # ...but that validation does happen by default
     with pytest.raises(ValueError, match="Expected schema"):
         CArrayStream.from_c_arrays([array_in], schema_in)
+
+
+def test_array_stream_from_iterable_is_lazy():
+    produced = []
+
+    def batches():
+        for i in range(3):
+            produced.append(i)
+            yield na.c_array([i], na.int32())
+
+    stream = CArrayStream.from_iterable(batches(), na.c_schema(na.int32()))
+    assert stream.get_schema().format == "i"
+    assert produced == []
+
+    assert stream.get_next().length == 1
+    assert produced == [0]
+
+    assert [array.length for array in stream] == [1, 1]
+    assert produced == [0, 1, 2]
+
+    # The end of the stream is sticky
+    with pytest.raises(StopIteration):
+        stream.get_next()
+
+
+def test_array_stream_from_iterable_converts_items():
+    schema_in = na.c_schema(na.int32())
+
+    stream = CArrayStream.from_iterable([[1, 2, 3], [4]], schema_in)
+    assert [array.length for array in stream] == [3, 1]
+
+    # Arrays are used without a copy
+    array_in = na.c_array([1, 2, 3], na.int32())
+    stream = CArrayStream.from_iterable([array_in], schema_in)
+    assert stream.get_next().buffers == array_in.buffers
+
+
+def test_array_stream_from_iterable_empty():
+    stream = CArrayStream.from_iterable([], na.c_schema(na.int32()))
+    assert list(stream) == []
+    assert stream.get_schema().format == "i"
+
+
+def test_array_stream_from_iterable_copies_schema():
+    schema_in = na.c_schema(na.int32())
+    stream = CArrayStream.from_iterable([], schema_in)
+    assert schema_in.is_valid()
+    assert stream.get_schema()._addr() != schema_in._addr()
+
+
+def test_array_stream_from_iterable_error():
+    def batches():
+        yield [1, 2, 3]
+        raise ValueError("source failed")
+
+    stream = CArrayStream.from_iterable(batches(), na.c_schema(na.int32()))
+    assert stream.get_next().length == 3
+
+    with pytest.raises(NanoarrowException, match="ValueError: source failed"):
+        stream.get_next()
+
+    # The error is terminal
+    with pytest.raises(NanoarrowException, match="ValueError: source failed"):
+        stream.get_next()
+
+
+def test_array_stream_from_iterable_validate():
+    schema_in = na.c_schema(na.null())
+    array_in = na.c_array([1, 2, 3], na.int32())
+
+    stream = CArrayStream.from_iterable([array_in], schema_in, validate=False)
+    assert stream.get_next().n_buffers == 2
+
+    stream = CArrayStream.from_iterable([array_in], schema_in)
+    with pytest.raises(NanoarrowException, match="ValueError: Expected schema"):
+        stream.get_next()
+
+
+def test_array_stream_from_iterable_not_iterable():
+    with pytest.raises(TypeError):
+        CArrayStream.from_iterable(None, na.c_schema(na.int32()))
+
+
+def test_array_stream_from_iterable_reentrant():
+    stream = None
+
+    def batches():
+        yield list(stream)
+
+    stream = CArrayStream.from_iterable(batches(), na.c_schema(na.int32()))
+    with pytest.raises(NanoarrowException, match="Re-entrant call"):
+        stream.get_next()
+
+
+def test_array_stream_from_iterable_releases_iterator():
+    closed = []
+
+    def batches():
+        try:
+            yield [1]
+            yield [2]
+        finally:
+            closed.append(True)
+
+    stream = CArrayStream.from_iterable(batches(), na.c_schema(na.int32()))
+    stream.get_next()
+    assert closed == []
+
+    stream.release()
+    assert closed == [True]
+
+
+def test_array_stream_from_iterable_export():
+    pa = pytest.importorskip("pyarrow")
+
+    schema = pa.schema([pa.field("x", pa.int32())])
+
+    def batches():
+        yield pa.record_batch([pa.array([1, 2], pa.int32())], schema=schema)
+        yield pa.record_batch([pa.array([3], pa.int32())], schema=schema)
+        raise ValueError("source failed")
+
+    stream = CArrayStream.from_iterable(batches(), na.c_schema(schema))
+    reader = pa.RecordBatchReader.from_stream(stream)
+    assert reader.read_next_batch().num_rows == 2
+    assert reader.read_next_batch().num_rows == 1
+    # EIO from the stream becomes an OSError in pyarrow
+    with pytest.raises(OSError, match="ValueError: source failed"):
+        reader.read_next_batch()
