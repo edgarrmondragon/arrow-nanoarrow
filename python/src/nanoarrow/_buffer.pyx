@@ -242,7 +242,7 @@ cdef bint dlpack_strides_are_contiguous(DLTensor* dl_tensor):
     if dl_tensor.ndim != 1:
         raise NotImplementedError("Contiguous stride check not implemented for ndim != 1")
 
-    # DLTensor strides are in elemements, not bytes
+    # DLTensor strides are in elements, not bytes
     return dl_tensor.strides[0] == 1
 
 

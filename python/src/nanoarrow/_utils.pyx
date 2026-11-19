@@ -82,7 +82,7 @@ def obj_is_capsule(obj, str name) -> bool:
     obj : any
         An object to check
     name : str
-        The PyCapule "name" (e.g., "arrow_array")
+        The PyCapsule "name" (e.g., "arrow_array")
     """
     return PyCapsule_IsValid(obj, name.encode()) == 1
 
@@ -301,7 +301,7 @@ def get_pyobject_buffer_count():
 
 
 cdef void c_deallocate_pyobject_buffer(ArrowBufferAllocator* allocator, uint8_t* ptr, int64_t size) noexcept with gil:
-    """ArrowBufferDeallocatorCallback for an ArrowBuffer borrwed from a PyObject
+    """ArrowBufferDeallocatorCallback for an ArrowBuffer borrowed from a PyObject
     """
     Py_DECREF(<object>allocator.private_data)
 
@@ -371,7 +371,7 @@ cdef void c_array_shallow_copy(object base, const ArrowArray* src, ArrowArray* d
 
     for i in range(src.n_buffers):
         if src.buffers[i] != NULL:
-            # The purpose of this buffer is soley so that we can use the
+            # The purpose of this buffer is solely so that we can use the
             # ArrowBufferDeallocator mechanism to add a reference to base.
             # The ArrowArray release callback that exists here after
             # because of ArrowArrayInitFromType() will call ArrowBufferReset()

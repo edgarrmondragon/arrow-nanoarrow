@@ -235,7 +235,7 @@ def c_array_from_buffers(
     children : Iterable of array-like
         An iterable of arrays used to set child fields of the array. Can contain
         any object accepted by :func:`c_array`. Must contain the exact number of
-        required children as specifed by ``schema``.
+        required children as specified by ``schema``.
     validation_level: None or str, optional
         One of "none" (no check), "minimal" (check buffer sizes that do not require
         dereferencing buffer content), "default" (check all buffer sizes), or "full"

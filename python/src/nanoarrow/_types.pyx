@@ -163,7 +163,7 @@ cdef tuple from_format(format):
         elif item_size == 8:
             return item_size, _types.INT64
 
-    # Check for unsinged integers
+    # Check for unsigned integers
     if format in ("B", "?", "H", "I", "L", "Q", "N"):
         if item_size == 1:
             return item_size, _types.UINT8

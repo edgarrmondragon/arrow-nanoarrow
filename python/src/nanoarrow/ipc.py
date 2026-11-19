@@ -88,7 +88,7 @@ class InputStream:
     def from_readable(obj):
         """Wrap an open readable file or buffer as an Arrow IPC stream
 
-        Wraps a readable object (specificially, an object that implements a
+        Wraps a readable object (specifically, an object that implements a
         ``readinto()`` method) as a non-owning InputStream. Closing ``obj`` remains
         the caller's responsibility: neither this stream nor the resulting array
         stream will call ``obj.close()``.
@@ -123,7 +123,7 @@ class InputStream:
     def from_path(obj, *args, **kwargs):
         """Wrap a local file as an IPC stream
 
-        Wraps a pathlike object (specificially, one that can be passed to ``open()``)
+        Wraps a pathlike object (specifically, one that can be passed to ``open()``)
         as an owning InputStream. The file will be opened in binary mode and will be
         closed when this stream or the resulting array stream is released.
 
@@ -160,7 +160,7 @@ class InputStream:
     def from_url(obj, *args, **kwargs):
         """Wrap a URL as an IPC stream
 
-        Wraps a URL (specificially, one that can be passed to
+        Wraps a URL (specifically, one that can be passed to
         ``urllib.request.urlopen()``) as an owning InputStream. The URL will be
         closed when this stream or the resulting array stream is released.
 
@@ -394,7 +394,7 @@ class StreamWriter:
     def from_writable(obj):
         """Write an Arrow IPC stream to a writable file
 
-        Wraps a writable object (specificially, an object that implements a
+        Wraps a writable object (specifically, an object that implements a
         ``write()`` method) as a non-owning StreamWriter. Closing ``obj`` remains
         the caller's responsibility (i.e., closing this object will not call
         ``obj.close()``.
@@ -438,7 +438,7 @@ class StreamWriter:
     def from_path(obj, *args, **kwargs):
         """Wrap a local file as an IPC stream
 
-        Wraps a pathlike object (specificially, one that can be passed to ``open()``)
+        Wraps a pathlike object (specifically, one that can be passed to ``open()``)
         as an owning StreamWriter. The file will be opened in (writable) binary mode and
         will be closed when the returned writer is closed.
 
@@ -481,7 +481,7 @@ class StreamWriter:
         return out
 
 
-# A self-contained example whose value is the serialized verison of
+# A self-contained example whose value is the serialized version of
 # DataFrame({"some_col": [1, 2, 3]}). Used to make the tests and documentation
 # self-contained.
 _EXAMPLE_IPC_SCHEMA = (

@@ -1193,7 +1193,7 @@ def list_(value_type, nullable: bool = True) -> Schema:
 def large_list(value_type, nullable: bool = True) -> Schema:
     """Create a type representing a variable-size list of some other type.
 
-    Unlike :func:`list_`, the func:`large_list` can accomodate arrays
+    Unlike :func:`list_`, the func:`large_list` can accommodate arrays
     with more than ``2 ** 31 - 1`` items in the values array.
 
     Parameters

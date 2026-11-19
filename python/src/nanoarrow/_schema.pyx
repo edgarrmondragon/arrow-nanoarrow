@@ -566,7 +566,7 @@ cdef class CSchemaView:
     def buffer_format(self) -> Union[str, None]:
         """The Python struct format representing an element of this type
         or None if there is no Python format string that can represent this
-        type without loosing information.
+        type without losing information.
         """
         if self.extension_name:
             return None

@@ -60,7 +60,7 @@ repos:
     rev: v2.2.5
     hooks:
     -   id: codespell
-        types_or: [rst, markdown, c, c++]
+        types_or: [rst, markdown, c, c++, cython, python, yaml]
         additional_dependencies: [tomli]
         exclude: |
             (?x)

@@ -46,7 +46,7 @@ jobs:
       run: |
         pip install pyarrow numpy asv
 
-    - name: Genereate fixtures
+    - name: Generate fixtures
       run: |
         cd dev/benchmarks
         python generate-fixtures.py

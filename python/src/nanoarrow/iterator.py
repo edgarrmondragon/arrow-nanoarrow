@@ -35,8 +35,8 @@ def iter_py(obj, schema=None) -> Iterable:
     Returns an iterator over an array stream where each item is a
     Python representation of the next element.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     obj : array stream-like
         An array-like or array stream-like object as sanitized by
         :func:`c_array_stream`.
@@ -63,8 +63,8 @@ def iter_tuples(obj, schema=None) -> Iterable[Tuple]:
     row. This is different than :func:`iter_py`, which encodes struct
     columns as dictionaries.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     obj : array stream-like
         An array-like or array stream-like object as sanitized by
         :func:`c_array_stream`.
@@ -90,8 +90,8 @@ def iter_array_views(obj, schema=None) -> Iterable[CArrayView]:
     Returns an iterator which yields a :func:`c_array_view`
     for each chunk in ``obj``.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     obj : array stream-like
         An array-like or array stream-like object as sanitized by
         :func:`c_array_stream`.

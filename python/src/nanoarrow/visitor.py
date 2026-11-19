@@ -59,8 +59,8 @@ class ArrayViewVisitable:
         Experimentally converts a stream of struct arrays into a list of contiguous
         sequences using the same logic as :meth:`to_pysequence`.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         handle_nulls : callable
             A function returning a sequence based on a validity bytemap and a
             contiguous buffer of values. If the array contains no nulls, the

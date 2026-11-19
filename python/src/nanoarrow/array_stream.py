@@ -31,8 +31,8 @@ class ArrayStream(ArrayViewVisitable):
     """High-level ArrayStream representation
 
     The ArrayStream is nanoarrow's high-level representation of zero
-    or more contiguous arrays that have not neccessarily been materialized.
-    This is in constrast to the nanoarrow :class:`Array`, which consists
+    or more contiguous arrays that have not necessarily been materialized.
+    This is in contrast to the nanoarrow :class:`Array`, which consists
     of zero or more contiguous arrays but is always fully-materialized.
 
     The :class:`ArrayStream` is similar to pyarrow's ``RecordBatchReader``

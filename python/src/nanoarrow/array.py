@@ -110,7 +110,7 @@ class Array(ArrayViewVisitable):
     interface.
 
     The :class:`Array` class is nanoarrow's high-level in-memory array
-    representation, encompasing the role of PyArrow's ``Array``,
+    representation, encompassing the role of PyArrow's ``Array``,
     ``ChunkedArray``, ``RecordBatch``, and ``Table``. This scope maps
     to that of a fully-consumed ``ArrowArrayStream`` as represented by
     the Arrow C Stream interface.
