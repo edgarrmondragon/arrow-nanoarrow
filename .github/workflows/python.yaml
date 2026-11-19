@@ -28,6 +28,7 @@ on:
       - '.github/workflows/python.yaml'
       - 'src/nanoarrow/**'
       - 'python/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -67,20 +68,40 @@ jobs:
         run: |
           pytest python/tests -v -s
 
-      - name: Check type stubs
-        if: success() && matrix.python-version == '3.13'
-        run: |
-          pip install mypy
-          cd src/nanoarrow
-          for mod in $(find . -name "*.pyx" | sed -e "s|./||" -e "s|.pyx||"); do
-            cat $mod
-            stubtest "nanoarrow.$mod"
-          done
-
       - name: Run doctests
         if: success() && matrix.python-version == '3.13'
         run: |
           pytest --pyargs nanoarrow --doctest-modules
+
+  # Make sure the committed type stubs match what generate_type_stubs.sh produces
+  check-type-stubs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install nanoarrow and stub generation tools
+        run: |
+          # The generated stubs depend on the exact versions of Cython, mypy, and
+          # black. Update these and regenerate the stubs together.
+          pip install "Cython==3.0.11" "mypy==1.11.2" "black==22.3.0" meson meson-python ninja
+          pip install --no-build-isolation ./python
+
+      - name: Regenerate type stubs
+        run: |
+          bash python/generate_type_stubs.sh
+
+      - name: Check type stubs are up to date
+        run: |
+          if [ -n "$(git status --porcelain -- python/src/nanoarrow)" ]; then
+            git status -- python/src/nanoarrow
+            git diff -- python/src/nanoarrow
+            echo "Type stubs are out of date. Run python/generate_type_stubs.sh with the tool versions above and commit the result."
+            exit 1
+          fi
 
   # Make sure we can build a source distribution and install from it
   python-install:

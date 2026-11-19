@@ -17,9 +17,11 @@
 
 SOURCE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Generates src/nanoarrow/*.pxi given the currently installed copy of
+# Generates src/nanoarrow/*.pyi given the currently installed copy of
 # nanoarrow. Requires mypy and black (where black is pinned to the
-# same version as in pre-commit)
+# same version as in pre-commit). The output depends on the exact versions
+# of Cython (used to build nanoarrow), mypy, and black: use the versions
+# pinned in the check-type-stubs job in .github/workflows/python.yaml.
 
 pushd "${SOURCE_DIR}"
 
